@@ -1,28 +1,17 @@
-import cv2
-import pytesseract
 import pyttsx3
 import speech_recognition as sr
-import pywhatkit
 from datetime import datetime
 import threading
 import random
-import time
 import queue
 import requests
 import os
 import subprocess
 from urllib.parse import urlparse
-import sys
-import webbrowser
-import multiprocessing
 
 # Initialize the speech synthesis engine
 engine = pyttsx3.init()
 
-# Configuration for Tesseract OCR
-pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'  # Adjust the path for Ubuntu
-
-# Define the lock for the speech synthesis function
 speak_lock = threading.Lock()
 
 def speak(text):
@@ -68,6 +57,7 @@ def recognize_speech(recognition_queue):
 
 # List to store downloaded file names
 downloaded_files = []
+mutex = threading.Lock()
 
 def download_file(url):
     response = requests.get(url, stream=True)
@@ -84,7 +74,6 @@ def download_file(url):
 
     print(f"Download complete: {file_name}")
 
-    # Add the downloaded file to the list safely with the mutex
     with mutex:
         downloaded_files.append(file_name)
 
@@ -111,9 +100,13 @@ def open_downloads_in_firefox():
     # Open the download folder in Firefox
     folder_path = os.path.abspath(dest_folder)
     firefox_command = f"firefox file://{folder_path}"
-    subprocess.Popen(firefox_command, shell=True)
+    
+    # Start Firefox 
+    process = subprocess.Popen(firefox_command, shell=True)
+    process.wait()  # Wait for Firefox to close
 
-    # The script continues running without waiting for Firefox to close
+    # After Firefox closes, restart greeting and listening
+    greet_and_listen()
 
 
 urls = [
@@ -125,8 +118,6 @@ dest_folder = 'downloads'
 
 # Create the destination folder if it does not exist
 os.makedirs(dest_folder, exist_ok=True)
-
-mutex = threading.Lock()
 
 # Shared data structure for the game
 shared_data = {
@@ -156,9 +147,6 @@ def respond(voice_data):
         get_date()
     else:
         speak('I cannot understand you, please try again.')
-
-def greeting():
-    speak("Hello, how can I assist you? Choose between 'play', 'download a photo', 'play music', 'get time', or 'get date'.")
 
 def start_game():
     global shared_data
@@ -199,7 +187,7 @@ def producer(recognition_queue):
 def consumer():
     global shared_data
     while not shared_data["game_over"]:
-        guess_semaphore.acquire()  # Wait for a guess to be ready
+        guess_semaphore.acquire()
         with data_lock:
             guess = shared_data["guess"]
             shared_data["attempts"] += 1
@@ -214,17 +202,7 @@ def consumer():
                 print("Incorrect guess. Try again.")
                 speak("Try again.")
             shared_data["guess"] = None
-        space_semaphore.release()  # Indicate that there is space for a new guess
-
-def reset_game():
-    global shared_data
-    shared_data = {
-        "secret_number": random.choice(["zero", "one"]),
-        "guess": None,
-        "attempts": 0,
-        "game_over": False
-    }
-    greet_and_listen()
+        space_semaphore.release()
 
 def greet_and_listen():
     speak("Choose 'play' to play a game or 'download' to download a photo or 'play music' or 'get time' or 'get date'.")
@@ -232,30 +210,39 @@ def greet_and_listen():
         voice_data = record_audio()
         respond(voice_data)
 
-
-# Define a mutex for the music playback operation
 play_music_lock = threading.Lock()
 
 def play_music():
     with play_music_lock:
         speak("What song would you like to hear?")
         song = record_audio()
-        speak("Playing " + song)
         
-        # Open one tab in Firefox with the song search results
-        search_url = f"https://www.youtube.com/results?search_query={song}"
-        webbrowser.open(search_url)
+        if song:
+            speak("Playing " + song)
+            search_url = f"https://www.youtube.com/results?search_query={song}"
+            
+            # Open the music search URL in Firefox and wait for it to close
+            firefox_command = ['firefox', search_url]
+            process = subprocess.Popen(firefox_command)
+            process.wait()  # Wait for Firefox to close
 
+    # After Firefox closes, restart greeting and listening
+    greet_and_listen()
+
+time_date_lock = threading.Lock()
 
 def get_time():
-    now = datetime.now()
-    speak("It is " + now.strftime("%H:%M"))
+    global time_date_lock
+    with time_date_lock:
+        now = datetime.now()
+        speak("It is " + now.strftime("%H:%M"))
 
 def get_date():
-    now = datetime.now()
-    speak("Today is " + now.strftime("%d %B %Y"))
+    global time_date_lock
+    with time_date_lock:
+        now = datetime.now()
+        speak("Today is " + now.strftime("%d %B %Y"))
 
 if _name_ == "_main_":
     print("Hello")
-    greeting()
     greet_and_listen()
