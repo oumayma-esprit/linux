@@ -1,23 +1,17 @@
-import cv2
 import pytesseract
 import pyttsx3
 import speech_recognition as sr
 import pywhatkit
 from datetime import datetime
-import random
-import time
 import requests
 import os
 import subprocess
 from urllib.parse import urlparse
-import sys
 import webbrowser
+import random
 
 # Initialize the speech synthesis engine
 engine = pyttsx3.init()
-
-# Configuration for Tesseract OCR
-pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'  # Adjust the path for Ubuntu
 
 def speak(text):
     try:
@@ -63,6 +57,7 @@ def download_photo(urls):
 
     print("All downloads are complete.")
 
+    # Display the downloaded files
     print("Downloaded files:")
     for file in downloaded_files:
         print(file)
@@ -70,9 +65,18 @@ def download_photo(urls):
     open_downloads_in_firefox()
 
 def open_downloads_in_firefox():
+    # Open the download folder in Firefox
     folder_path = os.path.abspath(dest_folder)
     firefox_command = f"firefox file://{folder_path}"
     subprocess.Popen(firefox_command, shell=True)
+
+# Shared data structure for the game
+shared_data = {
+    "secret_number": random.choice(["zero", "one"]),
+    "guess": None,
+    "attempts": 0,
+    "game_over": False
+}
 
 def respond(voice_data):
     if 'play' in voice_data:
@@ -95,30 +99,47 @@ def greeting():
     speak("Hello, how can I assist you? Choose between 'play', 'download a photo', 'play music', 'get time', or 'get date'.")
 
 def start_game():
+    global shared_data
     print("Game started!")
     speak("Welcome to the Secret Number game!")
     speak("Try to guess the secret number: 'zero' or 'one'.")
-    secret_number = random.choice(["zero", "one"])
-    attempts = 0
 
-    while True:
-        speak("Guess the secret number: 'zero' or 'one'")
+    while not shared_data["game_over"]:
         guess = record_audio()
-        attempts += 1
-        print(f"Guess: {guess}, Secret Number: {secret_number}, Attempts: {attempts}")
-
-        if guess == secret_number:
-            speak(f"Congratulations! You found the secret number {secret_number} in {attempts} attempts.")
-            speak("Exiting the game.")
-            break
+        if guess in ['zero', 'one']:
+            shared_data["guess"] = guess
+            shared_data["attempts"] += 1
+            if shared_data["guess"] == shared_data["secret_number"]:
+                shared_data["game_over"] = True
+                speak(f"Congratulations! You found the secret number {shared_data['secret_number']} in {shared_data['attempts']} attempts.")
+                speak("Exiting the game.")
+                break
+            else:
+                speak("Incorrect guess. Try again.")
         else:
-            speak("Try again.")
+            speak("Please provide a valid number: 'zero' or 'one'.")
+
+def reset_game():
+    global shared_data
+    shared_data = {
+        "secret_number": random.choice(["zero", "one"]),
+        "guess": None,
+        "attempts": 0,
+        "game_over": False
+    }
+    greet_and_listen()
+
+def greet_and_listen():
+    speak("Choose 'play' to play a game or 'download' to download a photo or 'play music' or 'get time' or 'get date'.")
+    while True:
+        voice_data = record_audio()
+        respond(voice_data)
 
 def play_music():
     speak("What song would you like to hear?")
     song = record_audio()
     speak("Playing " + song)
-    
+        
     # Open one tab in Firefox with the song search results
     search_url = f"https://www.youtube.com/results?search_query={song}"
     webbrowser.open(search_url)
@@ -131,20 +152,16 @@ def get_date():
     now = datetime.now()
     speak("Today is " + now.strftime("%d %B %Y"))
 
-urls = [
-    'https://img.freepik.com/photos-gratuite/lezard-animal-dans-nature-multicolore-gros-plan-ia-generative_188544-9072.jpg?size=626&ext=jpg&ga=GA1.1.2008272138.1721174400&semt=sph',
-    'https://cdn.britannica.com/34/235834-050-C5843610/two-different-breeds-of-cats-side-by-side-outdoors-in-the-garden.jpg?w=400&h=300&c=crop',
-    'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSVoFq3XlAYVa5ThUCMFuzv_C7zei7KhT9Nag&s',
-]
-dest_folder = 'downloads'
-
-# Create the destination folder if it does not exist
-os.makedirs(dest_folder, exist_ok=True)
-
-downloaded_files = []
-
-if __name__ == "__main__":
+if _name_ == "_main_":
+    downloaded_files = []
+    urls = [
+        'https://img.freepik.com/photos-gratuite/lezard-animal-dans-nature-multicolore-gros-plan-ia-generative_188544-9072.jpg?size=626&ext=jpg&ga=GA1.1.2008272138.1721174400&semt=sph',
+        'https://cdn.britannica.com/34/235834-050-C5843610/two-different-breeds-of-cats-side-by-side-outdoors-in-the-garden.jpg?w=400&h=300&c=crop',
+        'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSVoFq3XlAYVa5ThUCMFuzv_C7zei7KhT9Nag&s',
+    ]
+    dest_folder = 'downloads'
+    os.makedirs(dest_folder, exist_ok=True)
+    
+    print("Hello")
     greeting()
-    while True:
-        voice_data = record_audio()
-        respond(voice_data)
+    greet_and_listen()
